@@ -1,0 +1,163 @@
+#%RAML 1.0
+title: Customer Loyalty Program API
+version: v1
+baseUri: http://localhost:8081/api
+mediaType: application/json
+
+documentation:
+  - title: Overview
+    content: |
+      API to register customers, add reward points after purchases, and
+      evaluate/return loyalty tier based on accumulated points.
+
+      Loyalty Rules:
+      - 0     - 1999   -> Bronze
+      - 2000  - 4999   -> Silver
+      - 5000  - 9999   -> Gold
+      - 10000+         -> Platinum
+
+types:
+  Customer:
+    type: object
+    properties:
+      customerId: string
+      name: string
+      email: string
+      rewardPoints:
+        type: number
+        default: 0
+      tier: string
+
+  CustomerRegistrationRequest:
+    type: object
+    properties:
+      name: string
+      email: string
+
+  CustomerRegistrationResponse:
+    type: object
+    properties:
+      customerId: string
+      name: string
+      email: string
+      rewardPoints: number
+      tier: string
+
+  PurchaseRequest:
+    type: object
+    properties:
+      pointsEarned:
+        type: number
+        description: Reward points earned from this purchase, to be added to the customer's balance
+
+  UpdateStatusResponse:
+    type: object
+    properties:
+      customerId: string
+      rewardPoints: number
+      tier: string
+      status: string
+
+  LoyaltyLookupResponse:
+    type: object
+    properties:
+      customerId: string
+      rewardPoints: number
+      tier: string
+
+  ErrorResponse:
+    type: object
+    properties:
+      status: number
+      message: string
+      timestamp: string
+
+/customers:
+  displayName: Customers
+  post:
+    displayName: Register Customer
+    description: Add customer details and create a loyalty profile starting at Bronze.
+    body:
+      application/json:
+        type: CustomerRegistrationRequest
+        example:
+          name: "Ayush Satpathy"
+          email: "ayush.satpathy@example.com"
+    responses:
+      200:
+        body:
+          application/json:
+            type: CustomerRegistrationResponse
+            example:
+              customerId: "C1001"
+              name: "Ayush Satpathy"
+              email: "ayush.satpathy@example.com"
+              rewardPoints: 0
+              tier: "Bronze"
+      400:
+        description: Malformed request - missing/invalid name or email.
+        body:
+          application/json:
+            type: ErrorResponse
+      409:
+        description: A customer with this email already exists.
+        body:
+          application/json:
+            type: ErrorResponse
+
+  /{customerId}:
+    uriParameters:
+      customerId:
+        type: string
+        example: "C1001"
+
+    get:
+      displayName: Customer Lookup
+      description: Retrieve loyalty details - current reward points and tier.
+      responses:
+        200:
+          body:
+            application/json:
+              type: LoyaltyLookupResponse
+              example:
+                customerId: "C1001"
+                rewardPoints: 7500
+                tier: "Gold"
+        404:
+          description: No customer found for the given customerId.
+          body:
+            application/json:
+              type: ErrorResponse
+
+    /points:
+      post:
+        displayName: Add Points
+        description: |
+          Reward Update process:
+          Receive Purchase Data -> Fetch Customer -> Calculate New Points ->
+          Update Database -> Evaluate Tier -> Update Salesforce -> Return Updated Status
+        body:
+          application/json:
+            type: PurchaseRequest
+            example:
+              pointsEarned: 500
+        responses:
+          200:
+            body:
+              application/json:
+                type: UpdateStatusResponse
+                example:
+                  customerId: "C1001"
+                  rewardPoints: 8000
+                  tier: "Gold"
+                  status: "UPDATED"
+          404:
+            description: No customer found for the given customerId.
+            body:
+              application/json:
+                type: ErrorResponse
+          422:
+            description: pointsEarned is missing, negative, or not a number.
+            body:
+              application/json:
+                type: ErrorResponse
